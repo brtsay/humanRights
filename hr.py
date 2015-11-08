@@ -1,6 +1,7 @@
 import csv
 import re
 import string
+import requests
 import numpy as np
 import scipy.sparse
 from bisect import bisect_left, bisect_right
@@ -9,7 +10,9 @@ from itertools import chain
 from sklearn.feature_extraction.text import CountVectorizer
 from scipy.sparse import csr_matrix
 from nltk import word_tokenize
+from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
+from lxml import html
 
 stemmer = PorterStemmer()
 def stem_tokens(tokens, stemmer):
@@ -92,6 +95,20 @@ testdata = scipy.sparse.coo_matrix(labeled)
 N = labeled.shape[0]
 avg_dl = mean(list(Counter(coo.row).values()))
 
+
+# use UN human rights declaration for vocab
+page = requests.get('http://www.amnestyusa.org/research/human-rights-basics/universal-declaration-of-human-rights')
+tree = html.fromstring(page.content)
+
+page_intro = ' '.join(tree.xpath('/html/body/div[2]/div[2]/div[2]/div[3]/div/div/div/div/div[2]/p/text()'))
+page_list = ' '.join(tree.xpath('/html/body/div[2]/div[2]/div[2]/div[3]/div/div/div/div/div[2]/ol/li/text()'))
+page_text = page_intro + page_list
+page_text = re.sub('\s+', ' ', page_text)
+
+words = set(tokenize(page_text))
+dec_vocab = [word.lower() for word in words if word not in stopwords.words('english')]
+
+
 def IDF(query_word, N, coo, vocab):
     # get the index that sklearn created for each word
     q_idx = vocab[query_word]
@@ -100,12 +117,10 @@ def IDF(query_word, N, coo, vocab):
     idf = log((N - n_q + .5)/(n_q + 0.5))
     return idf
     
-def score(query_list, document, coo, col_index, vocab, idf, avg_dl, k=1.2, b=.75):
+def score(query_list, document, coo, col_index, vocab, idf, avg_dl, D, k=1.2, b=.75):
     Score = 0
     # find the document of interest
     rows = searchSorted(coo.row, document)
-    # length of document
-    D = len(rows)
     for query in query_list:
         q_idx = vocab[query]
         # columns = np.where(coo.col == q_idx)
@@ -127,6 +142,8 @@ def BM25(query_list, docs, k=1.2, b=.75):
     data = scipy.sparse.coo_matrix(vectorized)
     N = vectorized.shape[0]
     avg_dl = mean(list(Counter(data.row).values()))
+    # length of document
+    D = [len(doc.split()) for doc in docs]
     scores = np.zeros(N)
     idf = dict()
     for query in query_list:
@@ -135,7 +152,7 @@ def BM25(query_list, docs, k=1.2, b=.75):
     for i in range(N):
         if i % 1000 == 0:
             print('Finished with document', i)
-        scores[i] = score(query_list, i, data, all_columns, vocab, idf, avg_dl, k, b)
+        scores[i] = score(query_list, i, data, all_columns, vocab, idf, avg_dl, D[i], k, b)
     return scores
 
 with open('second_chunk_200k-1mil.csv') as csvfile:
