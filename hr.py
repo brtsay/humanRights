@@ -119,7 +119,8 @@ def score(query_list, document, coo, col_index, vocab, idf, avg_dl, k=1.2, b=.75
 def BM25(query_list, docs, k=1.2, b=.75):
     vectorizer = CountVectorizer(tokenizer = tokenize,
                                  strip_accents = 'unicode',
-                                 stop_words = 'english')
+                                 stop_words = 'english',
+                                 vocabulary = query_list)
     vectorized = vectorizer.fit_transform(docs)
     vocab = vectorizer.vocabulary_
     # convert csr into stuff with row, column indices
@@ -145,10 +146,11 @@ new = cleaner(new)
 
 a = BM25(['human', 'rights'], new, vocab)
 
-vectorizer = CountVectorizer(strip_accents = 'unicode',
-                             stop_words = 'english',
-                             vocabulary = vocabulary)
-new_v = vectorizer.fit_transform(new)
+vectorizer = CountVectorizer(tokenizer = tokenize,
+                             strip_accents = 'unicode',
+                             stop_words = 'english')
+new_v = vectorizer.fit_transform(new[:10000])
+vocab_n = vectorizer.vocabulary_
 
 query_list = ['human', 'judge']
 idf = dict()
