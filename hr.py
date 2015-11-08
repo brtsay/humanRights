@@ -97,17 +97,26 @@ avg_dl = mean(list(Counter(coo.row).values()))
 
 
 # use UN human rights declaration for vocab
-page = requests.get('http://www.amnestyusa.org/research/human-rights-basics/universal-declaration-of-human-rights')
+# doesn't work well
+# page = requests.get('http://www.amnestyusa.org/research/human-rights-basics/universal-declaration-of-human-rights')
+# tree = html.fromstring(page.content)
+
+# page_intro = ' '.join(tree.xpath('/html/body/div[2]/div[2]/div[2]/div[3]/div/div/div/div/div[2]/p/text()'))
+# page_list = ' '.join(tree.xpath('/html/body/div[2]/div[2]/div[2]/div[3]/div/div/div/div/div[2]/ol/li/text()'))
+# page_text = page_intro + page_list
+# page_text = re.sub('\s+', ' ', page_text)
+
+# words = ' '.join([word.lower() for word in page_text.split() if word not in stopwords.words('english')])
+# dec_vocab = set(tokenize(words))
+
+page = requests.get('http://www.vocabulary.com/lists/13308')
 tree = html.fromstring(page.content)
 
-page_intro = ' '.join(tree.xpath('/html/body/div[2]/div[2]/div[2]/div[3]/div/div/div/div/div[2]/p/text()'))
-page_list = ' '.join(tree.xpath('/html/body/div[2]/div[2]/div[2]/div[3]/div/div/div/div/div[2]/ol/li/text()'))
-page_text = page_intro + page_list
-page_text = re.sub('\s+', ' ', page_text)
+page_text = tree.xpath('//ol[@class = "wordlist notesView"]/li')
+words = ' '.join([x.get('word') for x in page_text])
+words = set(tokenize(words))
 
-words = set(tokenize(page_text))
-dec_vocab = [word.lower() for word in words if word not in stopwords.words('english')]
-
+/html/body/div[2]/div[1]/div[1]/div[3]/div/ol/li[7]
 
 def IDF(query_word, N, coo, vocab):
     # get the index that sklearn created for each word
@@ -124,11 +133,16 @@ def score(query_list, document, coo, col_index, vocab, idf, avg_dl, D, k=1.2, b=
     for query in query_list:
         q_idx = vocab[query]
         # columns = np.where(coo.col == q_idx)
-        columns = col_index[q_idx]
-        f_qi_idx = np.intersect1d(columns[0], rows, assume_unique = True)
-        if len(f_qi_idx) != 0:
-            f_qi = coo.data[int(f_qi_idx)]
-            Score  += idf[query] * f_qi * (k+1) / (f_qi + k * (1-b+b*D/avg_dl))
+        try:
+            columns = col_index[q_idx]
+            f_qi_idx = np.intersect1d(columns[0], rows, assume_unique = True)
+            if len(f_qi_idx) != 0:
+                f_qi = coo.data[int(f_qi_idx)]
+                Score  += idf[query] * f_qi * (k+1) / (f_qi + k * (1-b+b*D/avg_dl))
+        # words that don't appear in any of the documents will lead
+        # to indexerror
+        except IndexError:
+            pass
     return Score
 
 def BM25(query_list, docs, k=1.2, b=.75):
@@ -140,7 +154,7 @@ def BM25(query_list, docs, k=1.2, b=.75):
     vocab = vectorizer.vocabulary_
     # convert csr into stuff with row, column indices
     data = scipy.sparse.coo_matrix(vectorized)
-    N = vectorized.shape[0]
+    N = len(docs)
     avg_dl = mean(list(Counter(data.row).values()))
     # length of document
     D = [len(doc.split()) for doc in docs]
@@ -165,8 +179,12 @@ a = BM25(['human', 'rights'], new, vocab)
 
 vectorizer = CountVectorizer(tokenizer = tokenize,
                              strip_accents = 'unicode',
-                             stop_words = 'english')
-new_v = vectorizer.fit_transform(new[:10000])
+                             stop_words = 'english',
+                             vocabulary = dec_vocab)
+new_v = vectorizer.fit_transform(new[:500])
+testdata = scipy.sparse.coo_matrix(new_v)
+cc = get_indices_sparse(testdata.col)
+
 vocab_n = vectorizer.vocabulary_
 
 query_list = ['human', 'judge']
