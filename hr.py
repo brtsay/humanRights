@@ -111,7 +111,7 @@ def precision_recall(conf_matrix, label, label_dict):
     return precision, recall
 
 label_dict = {'hr': 1, 'nonhr': 0}
-n_trials = 2                    # how many times to run random search
+n_trials = 60                    # how many times to run random search
 
 results = [{} for x in range(n_trials)]
 
@@ -128,7 +128,7 @@ for i in range(n_trials):
                      'epoch': random.randint(1, 50),
                      'lr': random.uniform(0.1, 1.0),
                      'minCount': random.randint(1, 10),
-                     'wordNgrams': random.randint(1, 1)}
+                     'wordNgrams': random.randint(1, 5)}
     print(param_results)
     # train fasttext model
     fasttext = train_fasttext(FAST_TRAIN_FILE, FAST_MODEL, param_results)
