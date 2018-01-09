@@ -4,8 +4,11 @@ import csv
 import re
 import random
 import numpy as np
-from pprint import pprint
+import pandas as pd
 from pyfasttext import FastText
+import matplotlib.pyplot as plt
+import matplotlib.cm
+from mpl_toolkits.basemap import Basemap
 
 # get data into format fasttext accepts
 HR_FILE = 'human_rights_training_sample_8-18-15.csv'
@@ -160,25 +163,61 @@ with open(UNLABELED_FILE, 'r') as csvfile:
     reader = csv.reader(csvfile)
     # text is in 10th column, longlat in 24th and 25th column
     for line in reader:
-        if line[8] == 'en':     # only english tweets
-            # need to add \n for predict
-            cleanedtext_unlabeled.append(clean_text(line[11])+'\n')
-            text_unlabeled.append(line[11])
-            latlong_unlabeled.append([line[25], line[26]])
+        if line[8] == 'en' and line[25] != 'NA': # only english tweets and geocoded
+            try:
+                # need to add \n for predict
+                latlong_unlabeled.append([float(line[25]), float(line[26])])
+                cleanedtext_unlabeled.append(clean_text(line[11])+'\n')
+                text_unlabeled.append(line[11])
+            except ValueError:
+                pass
         
 labels_unlabeled = fasttext.predict(cleanedtext_unlabeled)
 
 
 hr_unlabeled = []
+hr_lat = []
+hr_long = []
 nonhr_unlabeled = []
+nonhr_lat = []
+nonhr_long = []
 for i, label in enumerate(labels_unlabeled):
     if label == ['hr']:
         hr_unlabeled.append(text_unlabeled[i])
+        hr_lat.append(latlong_unlabeled[i][0])
+        hr_long.append(latlong_unlabeled[i][1])
     else:
         nonhr_unlabeled.append(text_unlabeled[i])
+        nonhr_lat.append(latlong_unlabeled[i][0])
+        nonhr_long.append(latlong_unlabeled[i][1])
 
 # see some examples
 print('\n'.join(random.sample(hr_unlabeled, 10)))
 print('\n'.join(random.sample(nonhr_unlabeled, 10)))
 
 
+def draw_map(lat, longit, color):
+    """Draws a map of the US with the provided coordinates"""
+    fig, ax = plt.subplots(figsize=(10, 20))
+    # keep quality at [c]rude while still drawing
+    # us coords
+    # westlimit=-125.86; southlimit=24.09; eastlimit=-63.89; northlimit=49.3
+    m = Basemap(resolution='c',
+                projection='merc',
+                lat_0=37, lon_0=-90,
+                llcrnrlon=-125.86, llcrnrlat=24.09,
+                urcrnrlon=-63.89, urcrnrlat=49.3
+    )
+
+    m.drawmapboundary()
+    m.fillcontinents()
+    m.drawcoastlines()
+
+    # plot human rights tweets position
+    x, y = m(lat, longit)
+    m.plot(x, y, 'o', markersize=1, color=color)
+
+    m.readshapefile('usaShape/county/cb_2016_us_county_500k', 'county')
+
+draw_map(hr_lat, hr_long, "red")
+draw_map(nonhr_lat, nonhr_long, "blue")
