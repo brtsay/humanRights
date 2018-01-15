@@ -74,7 +74,7 @@ fi
 #         params=$params" --inpass"
 #     fi
 # fi
-echo $params
+echo $params >> vw/results
 
 vw --binary vw/vwtrain.txt -c -k -f vw/vw.model -b 24 $params
 
