@@ -20,23 +20,22 @@ UNLABELED_FILE = 'first200k.csv'
 
 def clean_text(text):
     """Preprocesses text"""
-    cleaned_text = text.lower().strip()
+    # strip does not remove all newlines?
+    cleaned_text = text.lower().strip().replace('\n', ' ')
     # remove punctuation
     cleaned_text = re.sub(r'[^\w\s]', '', cleaned_text)
     # remove URLs
     cleaned_text = re.sub(r'http\S+', '', cleaned_text)
     return cleaned_text
 
+
 with open(HR_FILE, 'r') as hrfile, open(NON_HR_FILE, 'r') as nonhrfile:
     hr_reader = csv.reader(hrfile)
     nonhr_reader = csv.reader(nonhrfile)
     hr_header = next(hr_reader)
     hr_text_idx = hr_header.index('text')
-    hr_lines = 0                # keep track of how many hr examples there are
-    nonhr_lines = 0
     with open(FAST_TRAIN_FILE, 'w') as fasttrain, open(FAST_TEST_FILE, 'w') as fasttest:
         for line in hr_reader:
-            hr_lines += 1
             cleaned_line = clean_text(line[hr_text_idx])
             towrite = '__label__hr {0} \n'.format(cleaned_line)
             if random.random() < 0.8:
@@ -44,7 +43,6 @@ with open(HR_FILE, 'r') as hrfile, open(NON_HR_FILE, 'r') as nonhrfile:
             else:
                 fasttest.write(towrite)
         for line in nonhr_reader:
-            nonhr_lines += 1
             # 11th column has text
             cleaned_line = clean_text(line[11])
             towrite = '__label__nonhr {0} \n'.format(cleaned_line)
@@ -61,7 +59,7 @@ def confusion_matrix(fast_file, fasttext, label_dict):
     Args:
         fast_file (str): Path to file in fasttext format to generate confusion matrix of
         fasttext: Trained supervised fasttext model to be used for prediction
-        label_dict (dict): Dict that maps labels to indices in confusion matrix
+        label_dict (dict): Dict that maps labels to indices in confusion1 slmiQOatrixr6O
 
     Returns:
         A k*k numpy array that shows false and true positives and negatives for each class
