@@ -14,6 +14,7 @@ from mpl_toolkits.basemap import Basemap
 HR_FILE = 'human_rights_training_sample_8-18-15.csv'
 NON_HR_FILE = 'non_hr_training_sample_8-21-15.csv'
 FAST_TRAIN_FILE = 'fasttrain.txt'
+FAST_VALID_FILE = 'fastvalid.txt'
 FAST_TEST_FILE = 'fasttest.txt'
 FAST_MODEL = 'fastmodel'
 UNLABELED_FILE = 'first200k.csv'
@@ -34,12 +35,15 @@ with open(HR_FILE, 'r') as hrfile, open(NON_HR_FILE, 'r') as nonhrfile:
     nonhr_reader = csv.reader(nonhrfile)
     hr_header = next(hr_reader)
     hr_text_idx = hr_header.index('text')
-    with open(FAST_TRAIN_FILE, 'w') as fasttrain, open(FAST_TEST_FILE, 'w') as fasttest:
+    with open(FAST_TRAIN_FILE, 'w') as fasttrain, open(FAST_VALID_FILE, 'w') as fastvalid, open(FAST_TEST_FILE, 'w') as fasttest:
         for line in hr_reader:
             cleaned_line = clean_text(line[hr_text_idx])
             towrite = '__label__hr {0} \n'.format(cleaned_line)
             if random.random() < 0.8:
-                fasttrain.write(towrite)
+                if random.random() < 0.8:
+                    fasttrain.write(towrite)
+                else:
+                    fastvalid.write(towrite)
             else:
                 fasttest.write(towrite)
         for line in nonhr_reader:
@@ -47,7 +51,10 @@ with open(HR_FILE, 'r') as hrfile, open(NON_HR_FILE, 'r') as nonhrfile:
             cleaned_line = clean_text(line[11])
             towrite = '__label__nonhr {0} \n'.format(cleaned_line)
             if random.random() < 0.8:
-                fasttrain.write(towrite)
+                if random.random() < 0.8:
+                    fasttrain.write(towrite)
+                else:
+                    fastvalid.write(towrite)
             else:
                 fasttest.write(towrite)
 
