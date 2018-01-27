@@ -9,10 +9,11 @@ force_l1=${2:-false}
 # and treat all the unlabeled as non-human rights
 supp_train=${3:-false}
 model_name=${4:-vw/vwmodel}
+results_file=${5:-vw/vwresults}
+fasttrain=${6:-fasttrain.txt}
+fastvalid=${7:-fastvalid.txt}
+fasttest=${8:-fasttest.txt}
 
-# a makes indexed arrays
-# declare -a files=("train" "test")
-files=("train" "valid" "test")
 
 # need to change label format from __label__LABEL to LABEL |
 # would need to replace colons and pipes, but all punctuation already removed
@@ -27,34 +28,47 @@ gen_reg_strength() {
     echo $reg_strength
 }
 
+# generate learning rate
+gen_lr() {
+    minusby=$(shuf -i 0-9 -n 1)
+    lr=$(bc -l <<< "1-$minusby/10")
+    echo $lr
+}
+
+
 if [[ "supp_train" = true ]]; then
     n_supp_lines=$(wc -l < first200k.csv)
     leftover=$(bc <<< "$n_supp_lines - 50000")
     tail -$leftover vw/vwfirst200k.txt > vw/vwlast150k.txt
 fi
 
+# only format validation and test sets
+# training data is made in loop
+files=("valid" "test")
+for data in "${files[@]}";
+do
+    cat fast${data}.txt | awk '{sub("__label__hr", "+1 |w"); sub("__label__nonhr", "-1 |w"); print $0}'| shuf > vw/${data}tmpW
+    cat vw/${data}tmpW | sed 's:.*|w::'| awk '$0="|l len:"length($0)' > vw/${data}tmpL
+    paste vw/${data}tmpW vw/${data}tmpL > vw/vw${data}.txt
+    rm vw/${data}tmp*
+done
+
 for i in in `seq 1 $random_iter`;
 do
     # upweight positive examples
     weight=$(shuf -i 1-10 -n 1)
+    echo weight: $weight >> $results_file
     # training data
-    for data in "${files[@]}";
-    do
-        if [ "$data" = "train" ]; then
-            # this part in loop since weight must be written in data
-            cat fasttrain.txt | awk '{sub("__label__hr", "+1 '$weight'|w"); sub("__label__nonhr", "-1 |w"); print $0}' | shuf > vw/${data}tmpW
-        else
-            cat fasttest.txt | awk '{sub("__label__hr", "+1 |w"); sub("__label__nonhr", "-1 |w"); print $0}'| shuf > vw/${data}tmpW
-        fi
-        # validation/test data
-        cat vw/${data}tmpW | sed 's:.*|w::'| awk '$0="|l len:"length($0)' > vw/${data}tmpL
-        paste vw/${data}tmpW vw/${data}tmpL > vw/vw${data}.txt
-        rm vw/${data}tmp*
-    done
+    # this part in loop since weight must be written in data
+    cat fasttrain.txt | awk '{sub("__label__hr", "+1 '$weight'|w"); sub("__label__nonhr", "-1 |w"); print $0}' | shuf > vw/traintmpW
+    # validation/test data
+    cat vw/traintmpW | sed 's:.*|w::'| awk '$0="|l len:"length($0)' > vw/traintmpL
+    paste vw/traintmpW vw/traintmpL > vw/vwtrain.txt
+    rm vw/traintmp*
+
     if [[ "$supp_train" = true ]]; then
-        echo weight: $weight >> vw/results
         head -50000 vw/vwfirst200k.txt | awk '{print("-1 "$0)}' | shuf >> vw/vwsupp.txt
-        head -30000 vw/vwsupp.txt >> vw/vwtrain.txt
+        head -30000 vw/vwsupp.txt > vw/vwtrain_supp.txt
         tail -15000 vw/vwsupp.txt >> vw/vwtest.txt
         cat vw/vwsupp.txt | awk 'NR > 30000 && NR < 35000' >> vw/vwvalid.txt
     fi
@@ -75,11 +89,6 @@ do
     n_skips=$(shuf -i 0-3 -n 1)
     loss_type_array=("logistic" "hinge")
     loss_type=${loss_type_array[$RANDOM % ${#loss_type_array[@]}]}
-    gen_lr() {
-        minusby=$(shuf -i 0-9 -n 1)
-        lr=$(bc -l <<< "1-$minusby/10")
-        echo $lr
-    }
     params="--passes $n_passes --loss_function $loss_type --ngram w$ngrams --skips w$n_skips --learning_rate $(gen_lr)"
 
     if (($RANDOM < 32767/2)); then
@@ -87,8 +96,7 @@ do
         params=$params" -q wl"
     fi
 
-    # whether to include regularization
-
+    # whether to include L1 or L2 regularization
     if [ "$force_l1" = false ]; then
         if (($RANDOM < 32767/2)); then
             if (($RANDOM < 32767/2)); then
@@ -110,7 +118,7 @@ do
     #         params=$params" --inpass"
     #     fi
     # fi
-    echo $params >> vw/results
+    echo $params >> $results_file
 
     vw --binary vw/vwtrain.txt -c -k -f vw/vw.model -b 24 $params
 
@@ -120,21 +128,6 @@ do
     vw --binary -t -i vw/vw.model -r vw/vwvalid_rawpred.txt vw/vwvalid.txt
 
     # calculate precision
-    cut -d' ' -f1 vw/vwvalid.txt | paste - vw/vwvalid_rawpred.txt | perf.linux/perf -t 0 -PRE -REC -PRF -PRB -ACC >> vw/results
+    cut -d' ' -f1 vw/vwvalid.txt | paste - vw/vwvalid_rawpred.txt | perf.linux/perf -t 0 -PRE -REC -PRF -PRB -ACC >> $results_file
 
-
-    # process unlabeled text
-    # cat first200k.csv | awk -F "\"*,\"*" '{print $12}' | sed 's/http[^ ]*//g' | tr -d '[:punct:]' | awk '{print "|w "$0}' | awk -f preproc.awk > vw/vwfirst200k.txt
-
-    # predict unlabeled text
-    # vw --binary -t -i vw/vw.model -p vw/vwunlabeled_pred.txt vw/vwfirst200k.txt
-
-    # # paste the labels with the txt to make looking through easier
-    # paste vw/vwunlabeled_pred.txt vw/vwfirst200k.txt > vw/vwlabeled200k.txt
-
-    # # look at some of the random tweets labeled as human rights related
-# grep  '^1.*' vw/vwlabeled200k.txt | shuf -n 15
 done
-
-
-
